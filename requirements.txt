@@ -1,0 +1,25 @@
+# --- Python core ---
+numpy>=1.24.0
+scipy>=1.10.0
+
+# --- Gym and Reinforcement Learning ---
+gymnasium>=0.29.1
+# pygame==2.5.2  # gymnasium's rendering dependency on some systems
+
+# --- PyTorch ---
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+
+# --- Visualization ---
+matplotlib>=3.7.0
+networkx>=3.1
+
+# --- Project utilities ---
+tqdm>=4.66.0
+
+# --- Optional but recommended for debugging ---
+rich>=13.0.0  # pretty logging
+
+# --- Additional libraries for the defender-specific environment ---
+# Not needed for attacker but required for defender
