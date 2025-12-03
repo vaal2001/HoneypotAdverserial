@@ -37,7 +37,6 @@ class Host:
     host_id: int
     host_type: HostType
     device_type: str
-    services: list   # ← toevoegen!
     response_model: ResponseModel
 
 

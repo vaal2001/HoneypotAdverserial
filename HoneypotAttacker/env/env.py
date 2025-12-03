@@ -394,36 +394,3 @@ class HoneypotDetectionEnv(gym.Env):
     def render(self):
         print("Known:", np.where(self.mask_known == 1)[0])
         print("Classified:", np.where(self.mask_classified == 1)[0])
-
-    def reset_with_world(self, N_actual, hosts, adj_true):
-        """
-        Gebruik een extern gegenereerde wereld (hosts + adjacency)
-        i.p.v. zelf generate_random_network aan te roepen.
-
-        - Breekt je normale reset() niet.
-        - Wordt alleen gebruikt door de adversarial env.
-        """
-        self.N_actual = int(N_actual)
-        self.hosts = list(hosts)  # shallow copy, zelfde Host objecten oké
-
-        # adjacency (true) inladen met zero-padding
-        self.adj_true[:, :] = 0
-        n = self.N_actual
-        self.adj_true[:n, :n] = adj_true[:n, :n].astype(int)
-
-        # discovered adjacency resetten
-        self.adj_discovered[:, :] = 0
-
-        # agent-state resetten zoals in je gewone reset()
-        self._reset_agent_state()
-
-        obs = build_observation(
-            self.node_features,
-            self.adj_discovered,
-            self.mask_known,
-            self.mask_classified,
-            self.max_actions,
-            self.max_actions,
-        )
-        obs["action_mask"] = self._build_action_mask()
-        return obs, {}
