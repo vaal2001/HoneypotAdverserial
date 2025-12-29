@@ -1,11 +1,8 @@
-# Thesis Code Repository
-
-## Title
-**<Thesis Title>**
+# Adversarial Honeypot Detection and Deployment with Reinforcement Learning
 
 ## Author
-<Your Name>  
-<Degree Program, University, Year>
+Valentijn Ouwehand
+Bachelor Computer Science, University of Leiden, 2026
 
 ---
 
