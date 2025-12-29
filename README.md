@@ -1,8 +1,12 @@
 # Source Code Bachelor Thesis Valentijn Ouwehand
 
 ## Author
-Valentijn Ouwehand
+Valentijn Ouwehand <br>
 Bachelor Computer Science, University of Leiden, 2026
+
+### Supervisors
+Dr. Ir. E. Makri <br>
+Dr. T.M. Moerland
 
 ---
 
