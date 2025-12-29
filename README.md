@@ -1,4 +1,4 @@
-# Adversarial Honeypot Detection and Deployment with Reinforcement Learning
+# Source Code Bachelor Thesis Valentijn Ouwehand
 
 ## Author
 Valentijn Ouwehand
@@ -7,35 +7,12 @@ Bachelor Computer Science, University of Leiden, 2026
 ---
 
 ## Overview
-
-This repository contains the source code developed for my thesis titled  
-**"<Thesis Title>"**.
+This repository contains the source code corresponding to the thesis titled **"Adversarial Honeypot Detection and Deployment with Reinforcement Learning"**
 
 The purpose of this code is to support the implementation, experiments, and results described in the thesis and to enable reproducibility of the presented work.
 
 ---
 
 ## Abstract / Project Summary
-
-<Brief summary of the thesis problem, motivation, and main contribution.  
-1–2 short paragraphs is usually sufficient.>
-
----
-
-## Research Objectives
-
-- <Objective 1>
-- <Objective 2>
-- <Objective 3>
-
----
-
-## Methodology
-
-<Describe the approach used in the thesis at a high level.  
-Mention algorithms, models, simulations, or systems without excessive detail.>
-
----
-
-## Repository Structure
+This thesis explores the application of Reinforcement Learning (RL) in the context of honeypot detection and deployment in a simulated network. Honeypots are deceptive systems designed to attract and engage attackers. However, the increasing use of sophisticated detection techniques presents new challenges. The goal of this thesis is to investigate the interaction between a Reinforcement Learning attacker and defender in a honeypot network. The attacker attempts to learn an optimal policy for detecting honeypots in a network, and the defender aims to find the optimal strategy for disguising these honeypots. Through a series of experiments in a simulated network environment, this research evaluates the interaction between these two agents. The findings suggest that RL-based strategies can enhance honeypot detection techniques, even when faced with an opposing defender agent.
 
