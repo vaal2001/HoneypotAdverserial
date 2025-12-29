@@ -19,7 +19,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # ------------------------------------------------------------
-    # Load env
+    # Load environment
     # ------------------------------------------------------------
     env = MultiAgentHoneypotEnv()
     obs_dict, info = env.reset()
@@ -57,7 +57,7 @@ def main():
     defender.eval()
 
     # ------------------------------------------------------------
-    # METRICS
+    # METRICS (GLOBAL)
     # ------------------------------------------------------------
     all_att_returns = []
     all_def_returns = []
@@ -66,6 +66,9 @@ def main():
     total_wrong = 0
     total_classified = 0
 
+    # ------------------------------------------------------------
+    # EVALUATION LOOP
+    # ------------------------------------------------------------
     for ep in range(args.episodes):
 
         obs_dict, info = env.reset()
@@ -76,31 +79,45 @@ def main():
         ep_ret_att = 0.0
         ep_ret_def = 0.0
 
-        print(f"\n=== EPISODE {ep+1} ===")
+        # Episode-level classification metrics
+        ep_correct = 0
+        ep_wrong = 0
+        ep_classified = 0
+
+        print(f"\n=== EPISODE {ep + 1} ===")
 
         while not done:
 
             # ----------------------------------------
-            # Prepare attacker observation tensors
+            # Prepare attacker observation
             # ----------------------------------------
             att_flat = env.flatten_attacker_obs(obs_att)
             att_mask = obs_att["action_mask"]
 
-            att_tensor = torch.tensor(att_flat, dtype=torch.float32, device=device).unsqueeze(0)
-            mask_tensor = torch.tensor(att_mask, dtype=torch.bool, device=device).unsqueeze(0)
+            att_tensor = torch.tensor(
+                att_flat, dtype=torch.float32, device=device
+            ).unsqueeze(0)
+
+            mask_tensor = torch.tensor(
+                att_mask, dtype=torch.bool, device=device
+            ).unsqueeze(0)
 
             # ----------------------------------------
-            # Prepare defender observation tensor
+            # Prepare defender observation
             # ----------------------------------------
             def_flat = env.flatten_defender_obs(obs_def)
-            def_tensor = torch.tensor(def_flat, dtype=torch.float32, device=device).unsqueeze(0)
+            def_tensor = torch.tensor(
+                def_flat, dtype=torch.float32, device=device
+            ).unsqueeze(0)
 
             # ----------------------------------------
             # Choose actions
             # ----------------------------------------
             with torch.no_grad():
                 a_def, _, _, _ = defender.get_action_and_value(def_tensor)
-                a_att, _, _, _ = attacker.get_action_and_value(att_tensor, action_mask=mask_tensor)
+                a_att, _, _, _ = attacker.get_action_and_value(
+                    att_tensor, action_mask=mask_tensor
+                )
 
             def_action = int(a_def.item())
             att_action = int(a_att.item())
@@ -108,7 +125,11 @@ def main():
             # ----------------------------------------
             # Step environment
             # ----------------------------------------
-            actions = {"defender": def_action, "attacker": att_action}
+            actions = {
+                "defender": def_action,
+                "attacker": att_action
+            }
+
             next_obs_dict, rewards, terminated, truncated, info = env.step(actions)
 
             r_att = rewards["attacker"]
@@ -119,7 +140,9 @@ def main():
 
             done = terminated or truncated
 
-            # Classification metrics (only when attacker classifies)
+            # ----------------------------------------
+            # Classification metrics (attacker only)
+            # ----------------------------------------
             host = att_action // env.K_attacker
             sub = att_action % env.K_attacker
 
@@ -127,39 +150,57 @@ def main():
                 predicted_honey = (sub == 6)
                 true_honey = (env.hosts[host].host_type.name == "HONEYPOT")
 
+                ep_classified += 1
                 total_classified += 1
+
                 if predicted_honey == true_honey:
+                    ep_correct += 1
                     total_correct += 1
                 else:
+                    ep_wrong += 1
                     total_wrong += 1
 
+            # ----------------------------------------
             # Prepare next state
+            # ----------------------------------------
             obs_att = next_obs_dict["attacker"]
             obs_def = next_obs_dict["defender"]
 
+        # --------------------------------------------------------
+        # End of episode logging
+        # --------------------------------------------------------
         all_att_returns.append(ep_ret_att)
         all_def_returns.append(ep_ret_def)
 
+        if ep_classified > 0:
+            ep_accuracy = ep_correct / ep_classified
+        else:
+            ep_accuracy = 0.0
+
         print(f"Attacker return: {ep_ret_att:.2f}")
         print(f"Defender return: {ep_ret_def:.2f}")
+        print(f"Classified:      {ep_classified}")
+        print(f"Correct:         {ep_correct}")
+        print(f"Wrong:           {ep_wrong}")
+        print(f"Accuracy:        {ep_accuracy:.3f}")
 
     # ------------------------------------------------------------
-    # FINAL METRICS
+    # FINAL SUMMARY
     # ------------------------------------------------------------
     print("\n================ FINAL RESULTS ================")
     print(f"Episodes: {args.episodes}")
     print(f"Average attacker return: {np.mean(all_att_returns):.3f}")
     print(f"Average defender return: {np.mean(all_def_returns):.3f}")
 
-    print(f"Classified: {total_classified}")
-    print(f"Correct:    {total_correct}")
-    print(f"Wrong:      {total_wrong}")
+    print(f"Total classified: {total_classified}")
+    print(f"Total correct:    {total_correct}")
+    print(f"Total wrong:      {total_wrong}")
 
     if total_classified > 0:
         accuracy = total_correct / total_classified
-        print(f"Accuracy:   {accuracy:.3f}")
+        print(f"Overall accuracy: {accuracy:.3f}")
     else:
-        print("Accuracy: N/A (no classifications made)")
+        print("Overall accuracy: N/A (no classifications made)")
 
 
 if __name__ == "__main__":

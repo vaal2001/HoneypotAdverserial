@@ -2,3 +2,15 @@ logs/*
 models/*
 __pycache__/
 venv/
+arena_eval.txt
+att_eval.txt
+def_eval.txt
+def_random_eval.txt
+extract_arena_results.py
+extract_attacker_results.py
+extract_defender_results.py
+meeting_elef.txt
+temp.py
+temp2.py
+models_multi/*
+results/*
