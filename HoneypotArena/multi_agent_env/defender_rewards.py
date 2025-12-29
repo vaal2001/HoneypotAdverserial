@@ -1,3 +1,2 @@
-# defender_rewards.py
-def defender_reward(attacker_reward_value: float) -> float:
+def defender_reward(attacker_reward_value):
     return -attacker_reward_value

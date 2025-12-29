@@ -1,7 +1,5 @@
-# shared_network_generator.py
 import numpy as np
 import networkx as nx
-from typing import List, Tuple
 from .shared_host_profiles import Host, HostType, ResponseModel
 
 DEVICE_TYPES = ["linux_web", "win_desktop", "iot_sensor", "db_server"]

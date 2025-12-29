@@ -1,25 +1,13 @@
-from __future__ import annotations
-from typing import List, Dict, Any
-
 import gymnasium as gym
 import numpy as np
 
-from .host_profiles import Host, HostType, DEVICE_TYPES
+from .host_profiles import HostType, DEVICE_TYPES
 from .network_generator import generate_random_network
-from .detectability import (
-    compute_real_baseline_stats,
-    detectability_for_hosts,
-    RealBaselineStats,
-)
-
+from .detectability import (compute_real_baseline_stats, detectability_for_hosts)
 
 class HoneypotDefenderEnv(gym.Env):
     """
-    Enkelvoudige defender-env (geen attacker).
-
-    De defender kan de 'signatuur' van hosts aanpassen zodat honeypots
-    moeilijker te detecteren zijn, terwijl echte hosts niet verdachter
-    mogen worden.
+    Simple defender environment (no attacker).
 
     Observation (Dict):
         node_features:   (N_max, F)
@@ -40,12 +28,7 @@ class HoneypotDefenderEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(
-        self,
-        N_max: int = 40,
-        max_steps: int = 100,
-        seed: int | None = None,
-    ):
+    def __init__(self, N_max = 40, max_steps = 100, seed = None):
         super().__init__()
         self.N_max = N_max
         self.max_steps = max_steps
@@ -53,60 +36,33 @@ class HoneypotDefenderEnv(gym.Env):
 
         self.rng = np.random.default_rng(seed)
 
-        # dynamische state
-        self.N_actual: int = 0
-        self.hosts: List[Host] = []
+        self.N_actual = 0
+        self.hosts = []
         self.adjacency = np.zeros((N_max, N_max), dtype=np.float32)
-        self.baseline_stats: RealBaselineStats | None = None
+        self.baseline_stats = None
         self.step_count = 0
 
-        # baseline detectability (bij reset, voor reward shaping)
         self.baseline_detect_honey: float = 0.0
         self.baseline_detect_real: float = 0.0
 
-        # laatste detectability per stap (voor logging / evaluatie)
         self.last_mean_detect_honey: float = 0.0
         self.last_mean_detect_real: float = 0.0
 
-        # Features: host_type flag + device one-hot + 7 numerieke features
-        #  1  : is_honeypot
-        #  |DEVICE_TYPES|
-        #  7  : [rtt_mean, rtt_std, banner_noise, os_fp, artefact_prob,
-        #         service_count, degree_norm]
         self.F = 1 + len(DEVICE_TYPES) + 7
 
-        # spaces
         self.observation_space = gym.spaces.Dict(
             {
-                "node_features": gym.spaces.Box(
-                    low=-np.inf,
-                    high=np.inf,
-                    shape=(N_max, self.F),
-                    dtype=np.float32,
-                ),
-                "adjacency": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(N_max, N_max),
-                    dtype=np.float32,
-                ),
-                "remaining_budget": gym.spaces.Box(
-                    low=0.0,
-                    high=1.0,
-                    shape=(1,),
-                    dtype=np.float32,
-                ),
+                "node_features": gym.spaces.Box(low=-np.inf, high=np.inf, shape=(N_max, self.F), dtype=np.float32),
+                "adjacency": gym.spaces.Box(low=0.0, high=1.0, shape=(N_max, N_max), dtype=np.float32),
+                "remaining_budget": gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
             }
         )
 
         self.action_space = gym.spaces.Discrete(N_max * self.K)
 
-    # ------------------------------------------------------------------
-    # Utilities
-    # ------------------------------------------------------------------
-    def _build_node_features(self) -> np.ndarray:
+    def _build_node_features(self):
         """
-        Bouw (N_max, F) features uit huidige hosts + adjacency.
+        Build (N_max, F) node feature matrix.
         """
         feats = np.zeros((self.N_max, self.F), dtype=np.float32)
 
@@ -117,16 +73,13 @@ class HoneypotDefenderEnv(gym.Env):
 
         for i, h in enumerate(self.hosts[: self.N_actual]):
             rm = h.response_model
-            f: List[float] = []
+            f = []
 
-            # type-flag
             f.append(1.0 if h.host_type == HostType.HONEYPOT else 0.0)
 
-            # device one-hot
             for dt in DEVICE_TYPES:
                 f.append(1.0 if h.device_type == dt else 0.0)
 
-            # genormaliseerde numerieke features
             rtt_mean_norm = np.clip(rm.rtt_mean, 1.0, 200.0) / 200.0
             rtt_std_norm = np.clip(rm.rtt_std, 0.5, 40.0) / 40.0
             banner_norm = np.clip(rm.banner_noise, 0.0, 1.0)
@@ -135,35 +88,21 @@ class HoneypotDefenderEnv(gym.Env):
             svc_norm = np.clip(rm.service_count, 1, 10) / 10.0
             degree_norm = deg[i] / max(1.0, self.N_actual - 1)
 
-            f.extend(
-                [
-                    rtt_mean_norm,
-                    rtt_std_norm,
-                    banner_norm,
-                    os_norm,
-                    artefact_norm,
-                    svc_norm,
-                    degree_norm,
-                ]
-            )
+            f.extend([rtt_mean_norm, rtt_std_norm, banner_norm, os_norm, artefact_norm, svc_norm, degree_norm])
 
             feats[i, :] = np.asarray(f, dtype=np.float32)
 
         return feats
 
-    def _build_observation(self) -> Dict[str, Any]:
+    def _build_observation(self):
         remaining = max(self.max_steps - self.step_count, 0)
         remaining_norm = np.array([remaining / self.max_steps], dtype=np.float32)
 
         node_features = self._build_node_features()
 
-        return {
-            "node_features": node_features,
-            "adjacency": self.adjacency.astype(np.float32),
-            "remaining_budget": remaining_norm,
-        }
+        return {"node_features": node_features, "adjacency": self.adjacency.astype(np.float32), "remaining_budget": remaining_norm}
 
-    def flatten_obs(self, obs: Dict[str, Any]) -> np.ndarray:
+    def flatten_obs(self, obs):
         nf = obs["node_features"].reshape(-1)
         adj = obs["adjacency"].reshape(-1)
         rb = obs["remaining_budget"].reshape(-1)
@@ -172,62 +111,46 @@ class HoneypotDefenderEnv(gym.Env):
     # ------------------------------------------------------------------
     # Gym API
     # ------------------------------------------------------------------
-    def reset(self, seed: int | None = None, options: Dict[str, Any] | None = None):
+    def reset(self, seed = None, options = None):
         if seed is not None:
             self.rng = np.random.default_rng(seed)
 
-        # genereer nieuw netwerk
-        self.N_actual, self.hosts, adj_padded = generate_random_network(
-            self.N_max, self.rng
-        )
+        self.N_actual, self.hosts, adj_padded = generate_random_network(self.N_max, self.rng)
         self.adjacency[:, :] = adj_padded.astype(np.float32)
 
-        # compute real-baseline stats
-        self.baseline_stats = compute_real_baseline_stats(
-            self.hosts, self.adjacency, self.N_actual
-        )
+        self.baseline_stats = compute_real_baseline_stats(self.hosts, self.adjacency, self.N_actual)
 
         self.step_count = 0
 
-        # init detectability metrics (baseline vóór defender-acties)
         assert self.baseline_stats is not None
-        mean_h, mean_r = detectability_for_hosts(
-            self.hosts,
-            self.adjacency,
-            self.baseline_stats,
-            self.N_actual,
-        )
+        mean_h, mean_r = detectability_for_hosts(self.hosts, self.adjacency, self.baseline_stats, self.N_actual)
         self.last_mean_detect_honey = mean_h
         self.last_mean_detect_real = mean_r
         self.baseline_detect_honey = mean_h
         self.baseline_detect_real = mean_r
 
         obs = self._build_observation()
-        info: Dict[str, Any] = {
-            "mean_detect_honeypot": mean_h,
-            "mean_detect_real": mean_r,
-        }
+        info = {"mean_detect_honeypot": mean_h, "mean_detect_real": mean_r}
         return obs, info
 
-    def _decode_action(self, action: int) -> tuple[int, int]:
+    def _decode_action(self, action):
         host_idx = action // self.K
         sub = action % self.K
         return host_idx, sub
 
-    def _apply_action(self, host_idx: int, sub_action: int) -> None:
+    def _apply_action(self, host_idx, sub_action):
         if not (0 <= host_idx < self.N_actual):
             return
 
         host = self.hosts[host_idx]
         rm = host.response_model
 
-        # eenvoudige nudge helper
-        def lerp(current: float, target: float, alpha: float) -> float:
+        def lerp(current, target, alpha):
             return (1.0 - alpha) * current + alpha * target
 
         is_honey = (host.host_type == HostType.HONEYPOT)
 
-        # ---- 0 / 1: RTT jitter richting real-baseline ----
+        # ---- 0 / 1: RTT jitter ----
         if sub_action == 0:  # increase RTT std
             if self.baseline_stats:
                 target = self.baseline_stats.rtt_std_mean
@@ -244,13 +167,10 @@ class HoneypotDefenderEnv(gym.Env):
             alpha = 0.4 if rm.rtt_std > target else 0.2
             rm.rtt_std = lerp(rm.rtt_std, target, alpha)
 
-        # ---- 2 / 3: banner noise richting real-baseline ----
+        # ---- 2 / 3: banner noise ----
         elif sub_action == 2:  # increase banner noise
             if self.baseline_stats:
-                target = max(
-                    self.baseline_stats.banner_noise_mean,
-                    rm.banner_noise + 0.05,
-                )
+                target = max(self.baseline_stats.banner_noise_mean, rm.banner_noise + 0.05)
             else:
                 target = rm.banner_noise + 0.1
             alpha = 0.4 if is_honey else 0.2
@@ -265,30 +185,28 @@ class HoneypotDefenderEnv(gym.Env):
             rm.banner_noise = lerp(rm.banner_noise, target, alpha)
 
         # ---- 4 / 5: artefact_prob ----
-        elif sub_action == 4:  # increase artefact prob (defender-fout)
+        elif sub_action == 4:  # increase artefact prob
             rm.artefact_prob += 0.05
 
-        elif sub_action == 5:  # decrease artefact prob (goed)
+        elif sub_action == 5:  # decrease artefact prob
             alpha = 0.6 if is_honey else 0.3
             target = 0.0
             rm.artefact_prob = lerp(rm.artefact_prob, target, alpha)
 
-        # ---- 6: service_count richting typische waarde ----
+        # ---- 6: service_count ----
         elif sub_action == 6:
-            # je kunt hier later device-type-specifieke targets gebruiken
             target = 3
             if rm.service_count < target:
                 rm.service_count += 1
             elif rm.service_count > target:
                 rm.service_count -= 1
 
-        # ---- 7: os_fingerprint richting 'real' ----
+        # ---- 7: os_fingerprint ----
         elif sub_action == 7:
             target = 1.0
             alpha = 0.5 if is_honey else 0.2
             rm.os_fingerprint = lerp(rm.os_fingerprint, target, alpha)
 
-        # clamps voor stabiliteit
         rm.rtt_std = float(np.clip(rm.rtt_std, 0.5, 40.0))
         rm.rtt_mean = float(np.clip(rm.rtt_mean, 1.0, 200.0))
         rm.banner_noise = float(np.clip(rm.banner_noise, 0.0, 1.0))
@@ -302,29 +220,15 @@ class HoneypotDefenderEnv(gym.Env):
         self.step_count += 1
 
         prev_h = self.last_mean_detect_honey
-        prev_r = self.last_mean_detect_real
 
         host_idx, sub = self._decode_action(action)
         self._apply_action(host_idx, sub)
 
-        # recompute detectability met actuele host-profielen
         assert self.baseline_stats is not None
-        mean_h, mean_r = detectability_for_hosts(
-            self.hosts,
-            self.adjacency,
-            self.baseline_stats,
-            self.N_actual,
-        )
+        mean_h, mean_r = detectability_for_hosts(self.hosts, self.adjacency, self.baseline_stats, self.N_actual)
         self.last_mean_detect_honey = mean_h
         self.last_mean_detect_real = mean_r
 
-        # ------------------------------------------------------------------
-        # Reward design:
-        #  - Beloning voor verbetering van honeypot-detectability
-        #    (lager is beter → improvement = prev_h - mean_h)
-        #  - Penalty als REAL detectability hoger wordt dan baseline
-        #  - Kleine step-cost
-        # ------------------------------------------------------------------
         improvement = prev_h - mean_h
 
         real_excess = max(0.0, mean_r - self.baseline_detect_real)
@@ -338,10 +242,7 @@ class HoneypotDefenderEnv(gym.Env):
         truncated = False
 
         obs = self._build_observation()
-        info = {
-            "mean_detect_honeypot": mean_h,
-            "mean_detect_real": mean_r,
-        }
+        info = {"mean_detect_honeypot": mean_h, "mean_detect_real": mean_r,}
         return obs, reward, terminated, truncated, info
 
     def render(self):

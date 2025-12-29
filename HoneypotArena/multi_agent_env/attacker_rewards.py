@@ -1,7 +1,6 @@
-# attacker_rewards.py
 from .shared_host_profiles import HostType
 
-def attacker_reward(host, classified_as_honeypot: bool) -> float:
+def attacker_reward(host, classified_as_honeypot):
     if host.host_type == HostType.REAL and not classified_as_honeypot:
         return +4
     if host.host_type == HostType.HONEYPOT and classified_as_honeypot:
@@ -12,5 +11,5 @@ def attacker_reward(host, classified_as_honeypot: bool) -> float:
         return -3
     return -4
 
-def step_cost() -> float:
+def step_cost():
     return -0.01

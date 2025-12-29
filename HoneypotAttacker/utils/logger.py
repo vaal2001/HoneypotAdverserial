@@ -1,6 +1,5 @@
 import time
 
-
 class SimpleLogger:
     def __init__(self):
         self.start = time.time()

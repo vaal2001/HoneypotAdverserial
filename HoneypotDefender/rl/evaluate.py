@@ -1,4 +1,3 @@
-from __future__ import annotations
 import argparse
 import json
 import os
@@ -11,29 +10,15 @@ from HoneypotDefender.rl.ppo_agent import PPOAgent
 from HoneypotDefender.env.kl_metrics import kl_real_vs_honeypot
 from HoneypotDefender.env.detectability import detectability_single
 
-
 def serialize_obs(env, obs_flat):
     """
-    Simpele serialisatie van de observatie.
-    Wil je meer details loggen (host params etc.), kun je dat hier uitbreiden.
+    Simple serialization of the observation.
     """
-    return {
-        "obs_flat": obs_flat.tolist(),
-    }
+    return {"obs_flat": obs_flat.tolist()}
 
-
-def heuristic_attack_metrics(env: HoneypotDefenderEnv) -> tuple[float, float]:
+def heuristic_attack_metrics(env):
     """
-    Heuristische 'attacker' op basis van detectability_single.
-
-    We berekenen per host een detectability-score t.o.v. de REAL-baseline,
-    kiezen een vaste threshold en classificeren:
-
-        score >= tau  → voorspeld HONEYPOT
-        score <  tau  → voorspeld REAL
-
-    ASR  = (TP + TN) / N
-    HDR  = TP / (TP + FN)
+    Heuristic attacker metrics (Attack Success Rate + Honey Detection Rate)
     """
     hosts = env.hosts
     N_actual = env.N_actual
@@ -56,12 +41,10 @@ def heuristic_attack_metrics(env: HoneypotDefenderEnv) -> tuple[float, float]:
     scores = np.asarray(scores, dtype=float)
     labels = np.asarray(labels, dtype=bool)
 
-    # simpele vaste threshold (kan je later tunen of adaptief maken)
     tau = 3.0
 
-    preds = scores >= tau  # True = predicted honeypot
+    preds = scores >= tau
 
-    # Confusion matrix
     true_honey = labels
     true_real = ~labels
 
@@ -76,35 +59,18 @@ def heuristic_attack_metrics(env: HoneypotDefenderEnv) -> tuple[float, float]:
 
     return asr, hdr
 
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model-path",
-        type=str,
-        default=None,
-        help="Pad naar getrainde PPO defender. Niet nodig bij --random.",
-    )
+    parser.add_argument("--model-path", type=str, default=None, help="Pad naar getrainde PPO defender. Niet nodig bij --random.")
     parser.add_argument("--episodes", type=int, default=20)
-    parser.add_argument(
-        "--log-path",
-        type=str,
-        default="logs/defender_eval_log.jsonl",
-    )
-    parser.add_argument(
-        "--random",
-        action="store_true",
-        help="Gebruik random actions i.p.v. PPO policy (baseline).",
-    )
+    parser.add_argument("--log-path", type=str, default="logs/defender_eval_log.jsonl")
+    parser.add_argument("--random", action="store_true", help="Gebruik random actions i.p.v. PPO policy (baseline).")
     args = parser.parse_args()
 
     os.makedirs(os.path.dirname(args.log_path), exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # -------------------------
-    # ENV INIT
-    # -------------------------
     env = HoneypotDefenderEnv()
     obs, info = env.reset()
     obs_flat = env.flatten_obs(obs)
@@ -114,9 +80,6 @@ def main():
     N_max = env.N_max
     F_features = env.F
 
-    # -------------------------
-    # AGENT INIT
-    # -------------------------
     agent = None
     if not args.random:
         if args.model_path is None:
@@ -138,11 +101,11 @@ def main():
         agent.eval()
 
     returns = []
-    all_detect_honey = []  # per-episode mean detectability honeypots
-    all_detect_real = []   # per-episode mean detectability real hosts
-    all_kl = []            # per-episode mean KL
-    all_asr = []           # per-episode Attack Success Rate
-    all_hdr = []           # per-episode Honey Detection Rate
+    all_detect_honey = []
+    all_detect_real = []
+    all_kl = []
+    all_asr = []
+    all_hdr = []
 
     mode = "RANDOM" if args.random else "PPO"
     print(f"Starting Defender Evaluation... (mode={mode})\n")
@@ -162,9 +125,7 @@ def main():
             kl_total = 0.0
 
             while not done:
-                obs_tensor = torch.tensor(
-                    obs_flat, dtype=torch.float32, device=device
-                )
+                obs_tensor = torch.tensor(obs_flat, dtype=torch.float32, device=device)
 
                 if args.random:
                     action = env.action_space.sample()
@@ -173,28 +134,23 @@ def main():
                         a, logp, ent, v = agent.get_action_and_value(obs_tensor)
                     action = int(a.item())
 
-                # State before
                 state_before = serialize_obs(env, obs_flat)
 
                 next_obs, reward, terminated, truncated, info = env.step(action)
                 done = terminated or truncated
                 ep_return += reward
 
-                # State after
                 next_flat = env.flatten_obs(next_obs)
                 state_after = serialize_obs(env, next_flat)
 
-                # Update metrics (per step)
                 detect_honey_total += env.last_mean_detect_honey
                 detect_real_total += env.last_mean_detect_real
 
-                # Compute KL per step
                 kl = kl_real_vs_honeypot(env.hosts, env.adjacency, env.N_actual)
                 if np.isnan(kl):
                     kl = 0.0
                 kl_total += kl
 
-                # Write JSONL record (step-level)
                 record = {
                     "episode": ep,
                     "step": step_idx,
@@ -214,19 +170,16 @@ def main():
 
                 f_log.write(json.dumps(record) + "\n")
 
-                # Prepare next input
                 obs = next_obs
                 obs_flat = next_flat
 
                 step_idx += 1
 
-            # Per-episode gemiddelden (detectability + KL)
             steps = max(1, step_idx)
             mean_detect_honey = detect_honey_total / steps
             mean_detect_real = detect_real_total / steps
             mean_kl = kl_total / steps
 
-            # Heuristic attacker metrics (op eindconfiguratie)
             asr, hdr = heuristic_attack_metrics(env)
 
             returns.append(ep_return)
@@ -254,7 +207,6 @@ def main():
     print(f"Avg detect_real:       {np.mean(all_detect_real):.3f}   # per step")
     print(f"Avg KL(real||honeypot):{np.mean(all_kl):.3f}")
     print(f"Step log:              {args.log_path}")
-
 
 if __name__ == "__main__":
     main()

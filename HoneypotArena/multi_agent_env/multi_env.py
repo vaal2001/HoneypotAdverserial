@@ -1,59 +1,32 @@
-# multi_env.py
 import gymnasium as gym
 import numpy as np
-from typing import Dict, Any
 
-from .shared_host_profiles import Host, HostType, ResponseModel
-from .shared_network_generator import generate_random_network
-from .shared_probe_models import (
-    simulate_ping,
-    simulate_syn_scan,
-    simulate_banner,
-    simulate_os,
-    simulate_service,
-    ProbeResult,
-)
-
+from .shared_host_profiles import HostType
+from .shared_network_generator import generate_random_network, DEVICE_TYPES
+from .shared_probe_models import (simulate_ping, simulate_syn_scan, simulate_banner, simulate_os, simulate_service)
 from .attacker_feature_update import init_feature_matrix, update_features
-from .attacker_rewards import (
-    attacker_reward as reward_classification,
-    step_cost,
-)
+from .attacker_rewards import (attacker_reward as reward_classification, step_cost)
 from .defender_rewards import defender_reward
-
-
-# =====================================================================
-# Multi-agent Honeypot Environment
-# =====================================================================
 
 class MultiAgentHoneypotEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(
-        self,
-        N_max: int = 40,
-        F_attacker: int = 34,
-        defender_F: int = 1 + 4 + 7,  # honeypot_flag + device_onehot + features
-        max_attacker_actions: int = 200,
-        seed: int | None = None,
-    ):
+    def __init__( self, N_max = 40, F_attacker = 34, defender_F = 1 + 4 + 7, max_attacker_actions = 200, seed = None):
         super().__init__()
 
         self.N_max = N_max
         self.F_attacker = F_attacker
         self.F_defender = defender_F
-        self.K_attacker = 8  # attacker actions per host
-        self.K_defender = 8  # defender actions per host
+        self.K_attacker = 8
+        self.K_defender = 8
         self.max_attacker_actions = max_attacker_actions
         self.rng = np.random.default_rng(seed)
 
-        # === ENV STATE ===
         self.N_actual = 0
-        self.hosts: list[Host] = []
+        self.hosts = []
         self.adj_true = np.zeros((N_max, N_max), dtype=int)
 
-        # Attacker-side state
         self.node_features = init_feature_matrix(N_max, F_attacker)
         self.adj_discovered = np.zeros((N_max, N_max), dtype=int)
         self.mask_known = np.zeros(N_max, dtype=np.int8)
@@ -63,70 +36,35 @@ class MultiAgentHoneypotEnv(gym.Env):
         self.ping_done = np.zeros(N_max, dtype=np.int8)
         self.attacker_actions_used = 0
 
-        # Gym API: two observation-spaces merged as a dict
         self.observation_space = gym.spaces.Dict(
             {
                 "attacker": gym.spaces.Dict(
                     {
-                        "node_features": gym.spaces.Box(
-                            low=-np.inf,
-                            high=np.inf,
-                            shape=(N_max, F_attacker),
-                            dtype=np.float32,
-                        ),
-                        "adjacency": gym.spaces.Box(
-                            low=0.0,
-                            high=1.0,
-                            shape=(N_max, N_max),
-                            dtype=np.float32,
-                        ),
+                        "node_features": gym.spaces.Box(low=-np.inf, high=np.inf, shape=(N_max, F_attacker), dtype=np.float32),
+                        "adjacency": gym.spaces.Box(low=0.0, high=1.0, shape=(N_max, N_max), dtype=np.float32),
                         "mask_known": gym.spaces.MultiBinary(N_max),
                         "mask_classified": gym.spaces.MultiBinary(N_max),
-                        "remaining_budget": gym.spaces.Box(
-                            low=0.0, high=1.0, shape=(1,), dtype=np.float32
-                        ),
-                        "action_mask": gym.spaces.MultiBinary(N_max * self.K_attacker),
+                        "remaining_budget": gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32),
+                        "action_mask": gym.spaces.MultiBinary(N_max * self.K_attacker)
                     }
                 ),
                 "defender": gym.spaces.Dict(
                     {
-                        "node_features": gym.spaces.Box(
-                            low=-np.inf,
-                            high=np.inf,
-                            shape=(N_max, defender_F),
-                            dtype=np.float32,
-                        ),
-                        "adjacency": gym.spaces.Box(
-                            low=0.0,
-                            high=1.0,
-                            shape=(N_max, N_max),
-                            dtype=np.float32,
-                        ),
-                        "remaining_budget": gym.spaces.Box(
-                            low=0.0, high=1.0, shape=(1,), dtype=np.float32
-                        ),
+                        "node_features": gym.spaces.Box(low=-np.inf, high=np.inf, shape=(N_max, defender_F), dtype=np.float32),
+                        "adjacency": gym.spaces.Box(low=0.0, high=1.0, shape=(N_max, N_max), dtype=np.float32),
+                        "remaining_budget": gym.spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
                     }
                 ),
             }
         )
 
-        # Action spaces for both agents
-        self.action_spaces = {
-            "attacker": gym.spaces.Discrete(N_max * self.K_attacker),
-            "defender": gym.spaces.Discrete(N_max * self.K_defender),
-        }
+        self.action_spaces = {"attacker": gym.spaces.Discrete(N_max * self.K_attacker), "defender": gym.spaces.Discrete(N_max * self.K_defender)}
 
-
-    # ========================================================================
-    # Reset
-    # ========================================================================
     def reset(self, *, seed=None, options=None):
         if seed is not None:
             self.rng = np.random.default_rng(seed)
 
-        self.N_actual, self.hosts, self.adj_true = generate_random_network(
-            self.N_max, self.rng
-        )
+        self.N_actual, self.hosts, self.adj_true = generate_random_network(self.N_max, self.rng)
 
         self._reset_attacker_state()
 
@@ -135,10 +73,6 @@ class MultiAgentHoneypotEnv(gym.Env):
 
         return {"attacker": obs_att, "defender": obs_def}, {}
 
-
-    # ========================================================================
-    # Attacker state reset
-    # ========================================================================
     def _reset_attacker_state(self):
         self.node_features = init_feature_matrix(self.N_max, self.F_attacker)
         self.adj_discovered[:] = 0
@@ -149,11 +83,7 @@ class MultiAgentHoneypotEnv(gym.Env):
         self.ping_done[:] = 0
         self.attacker_actions_used = 0
 
-
-    # ========================================================================
-    # Observations
-    # ========================================================================
-    def _build_attacker_obs(self) -> Dict[str, Any]:
+    def _build_attacker_obs(self):
         remaining = max(self.max_attacker_actions - self.attacker_actions_used, 0)
         remaining_norm = np.array([remaining / self.max_attacker_actions], dtype=np.float32)
 
@@ -178,7 +108,6 @@ class MultiAgentHoneypotEnv(gym.Env):
 
                 f.append(1.0 if h.host_type == HostType.HONEYPOT else 0.0)
 
-                from .shared_network_generator import DEVICE_TYPES
                 for dt in DEVICE_TYPES:
                     f.append(1.0 if h.device_type == dt else 0.0)
 
@@ -190,31 +119,15 @@ class MultiAgentHoneypotEnv(gym.Env):
                 svc_norm = rm.service_count / 10.0
                 degree_norm = deg[i] / max(1, self.N_actual - 1)
 
-                f.extend([
-                    rtt_mean_norm,
-                    rtt_std_norm,
-                    banner_norm,
-                    os_norm,
-                    artefact_norm,
-                    svc_norm,
-                    degree_norm,
-                ])
+                f.extend([rtt_mean_norm, rtt_std_norm, banner_norm, os_norm, artefact_norm, svc_norm, degree_norm])
 
                 feats[i, :] = np.asarray(f, dtype=np.float32)
 
         remaining = max(self.max_attacker_actions - self.attacker_actions_used, 0)
         remaining_norm = np.array([remaining / self.max_attacker_actions], dtype=np.float32)
 
-        return {
-            "node_features": feats.astype(np.float32),
-            "adjacency": self.adj_true.astype(np.float32),
-            "remaining_budget": remaining_norm,
-        }
+        return {"node_features": feats.astype(np.float32), "adjacency": self.adj_true.astype(np.float32), "remaining_budget": remaining_norm}
 
-
-    # ========================================================================
-    # Attacker action mask
-    # ========================================================================
     def _build_attacker_action_mask(self):
         mask = np.zeros(self.N_max * self.K_attacker, dtype=bool)
 
@@ -255,57 +168,31 @@ class MultiAgentHoneypotEnv(gym.Env):
 
         return mask
 
-
-    # ========================================================================
-    # Step
-    # ========================================================================
-    def step(self, actions: dict):
+    def step(self, actions):
 
         defender_action = actions["defender"]
         attacker_action = actions["attacker"]
 
-        # ================================
-        # 1. DEFENDER MOVE
-        # ================================
         self._apply_defender_action(defender_action)
-
-        # ================================
-        # 2. ATTACKER MOVE
-        # ================================
         att_reward = self._apply_attacker_action(attacker_action)
-
-        # ================================
-        # Rewards
-        # ================================
         def_reward = defender_reward(att_reward)
 
         terminated = False
         truncated = False
 
-        # Episode ends when attacker finishes classification or runs out of budget
         if self.attacker_actions_used >= self.max_attacker_actions:
             terminated = True
 
         if self.mask_classified[:self.N_actual].sum() == self.N_actual:
             terminated = True
 
-        obs = {
-            "attacker": self._build_attacker_obs(),
-            "defender": self._build_defender_obs()
-        }
+        obs = {"attacker": self._build_attacker_obs(), "defender": self._build_defender_obs()}
 
-        rewards = {
-            "attacker": att_reward,
-            "defender": def_reward
-        }
+        rewards = {"attacker": att_reward, "defender": def_reward}
 
         return obs, rewards, terminated, truncated, {}
 
-
-    # ========================================================================
-    # Defender mutation engine
-    # ========================================================================
-    def _apply_defender_action(self, action: int):
+    def _apply_defender_action(self, action):
         host_idx = action // self.K_defender
         sub = action % self.K_defender
 
@@ -342,11 +229,7 @@ class MultiAgentHoneypotEnv(gym.Env):
         rm.artefact_prob = float(np.clip(rm.artefact_prob, 0.0, 1.0))
         rm.service_count = int(np.clip(rm.service_count, 1, 10))
 
-
-    # ========================================================================
-    # Attacker action engine
-    # ========================================================================
-    def _apply_attacker_action(self, action: int):
+    def _apply_attacker_action(self, action):
         mask = self._build_attacker_action_mask()
         if not mask[action]:
             return -1.0
@@ -390,10 +273,6 @@ class MultiAgentHoneypotEnv(gym.Env):
 
         return reward
 
-
-    # ========================================================================
-    # Attacker probe handlers
-    # ========================================================================
     def _att_ping(self, idx):
         if self.ping_done[idx] == 1:
             return 0.0
@@ -432,11 +311,7 @@ class MultiAgentHoneypotEnv(gym.Env):
         update_features(self.node_features, idx, 4, res)
         return 0.25 + (0.1 if res.artefact else 0.0)
 
-
-    # ========================================================================
-    # Flatten helpers
-    # ========================================================================
-    def flatten_attacker_obs(self, obs: dict) -> np.ndarray:
+    def flatten_attacker_obs(self, obs):
         nf = obs["node_features"].reshape(-1)
         adj = obs["adjacency"].reshape(-1)
         mk = obs["mask_known"].reshape(-1)
@@ -444,7 +319,7 @@ class MultiAgentHoneypotEnv(gym.Env):
         rb = obs["remaining_budget"].reshape(-1)
         return np.concatenate([nf, adj, mk, mc, rb], axis=0)
 
-    def flatten_defender_obs(self, obs: dict) -> np.ndarray:
+    def flatten_defender_obs(self, obs):
         nf = obs["node_features"].reshape(-1)
         adj = obs["adjacency"].reshape(-1)
         rb = obs["remaining_budget"].reshape(-1)

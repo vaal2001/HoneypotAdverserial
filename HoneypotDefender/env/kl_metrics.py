@@ -1,11 +1,8 @@
-from __future__ import annotations
-from typing import List
 import numpy as np
 
-from .host_profiles import Host, HostType
+from .host_profiles import HostType
 
-
-def _safe_mean_std(values, eps: float = 1e-3):
+def _safe_mean_std(values, eps = 1e-3):
     if len(values) == 0:
         return 0.0, eps
     arr = np.asarray(values, dtype=float)
@@ -13,38 +10,17 @@ def _safe_mean_std(values, eps: float = 1e-3):
     std = float(np.std(arr))
     return mu, max(std, eps)
 
-
-def _kl_gaussian(mu_p: float, std_p: float, mu_q: float, std_q: float) -> float:
-    """
-    KL(N_p || N_q) (1D).
-    """
+def _kl_gaussian(mu_p, std_p, mu_q, std_q):
     var_p = std_p ** 2
     var_q = std_q ** 2
     var_p = max(var_p, 1e-9)
     var_q = max(var_q, 1e-9)
 
-    return 0.5 * (
-        (var_p / var_q)
-        + ((mu_q - mu_p) ** 2) / var_q
-        - 1.0
-        + np.log(var_q / var_p)
-    )
+    return 0.5 * ((var_p / var_q) + ((mu_q - mu_p) ** 2) / var_q - 1.0 + np.log(var_q / var_p))
 
-
-def kl_real_vs_honeypot(
-    hosts: List[Host],
-    adjacency: np.ndarray,
-    N_actual: int,
-) -> float:
+def kl_real_vs_honeypot(hosts, adjacency, N_actual):
     """
-    KL-divergence tussen distributies van REAL vs HONEYPOT hosts
-    over enkele kernfeatures:
-      - rtt_mean
-      - rtt_std
-      - banner_noise
-      - os_fingerprint
-      - artefact_prob
-      - degree
+    KL-divergence between REAL vs HONEYPOT host distributions
     """
     deg = adjacency[:N_actual, :N_actual].sum(axis=1).astype(float)
 
@@ -68,7 +44,6 @@ def kl_real_vs_honeypot(
             honey["art"].append(rm.artefact_prob)
             honey["deg"].append(deg[i])
 
-    # Als één van de groepen leeg is → KL = 0
     if len(real["rtt_std"]) == 0 or len(honey["rtt_std"]) == 0:
         return 0.0
 
@@ -81,5 +56,4 @@ def kl_real_vs_honeypot(
         kls.append(_kl_gaussian(mu_r, std_r, mu_h, std_h))
 
     kl_val = float(np.mean(kls))
-    # clip om runaway KL te voorkomen
     return float(np.clip(kl_val, 0.0, 20.0))

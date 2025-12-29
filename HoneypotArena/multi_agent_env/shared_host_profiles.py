@@ -1,8 +1,5 @@
-# shared_host_profiles.py
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import List
-import numpy as np
 
 class HostType(Enum):
     REAL = auto()
@@ -10,11 +7,6 @@ class HostType(Enum):
 
 @dataclass
 class ResponseModel:
-    """
-    Unified response model used by both attacker & defender.
-    Defender modifies these values.
-    Attacker probes read these values.
-    """
     rtt_mean: float
     rtt_std: float
     banner_noise: float

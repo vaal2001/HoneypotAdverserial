@@ -1,8 +1,6 @@
-# shared_probe_models.py
 from .shared_host_profiles import HostType
 from dataclasses import dataclass
 from typing import Optional
-import numpy as np
 
 @dataclass
 class ProbeResult:

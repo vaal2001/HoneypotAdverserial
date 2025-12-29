@@ -1,17 +1,14 @@
-from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import numpy as np
 
-from .host_profiles import Host, HostType
-
+from .host_profiles import HostType
 
 @dataclass
 class RealBaselineStats:
     """
-    Baseline statistieken van REAL hosts in een episode.
-    Wordt gebruikt om 'distance from real' te meten.
+    Baseline statistics for REAL hosts in an episode.
+    Used to measure 'distance from real'.
     """
     rtt_std_mean: float
     rtt_std_std: float
@@ -27,22 +24,16 @@ class RealBaselineStats:
     degree_std: float
 
 
-def _safe_std(x: np.ndarray, eps: float = 1e-3) -> float:
+def _safe_std(x, eps = 1e-3):
     if x.size == 0:
         return eps
     s = float(np.std(x))
     return max(s, eps)
 
-
-def compute_real_baseline_stats(
-    hosts: List[Host],
-    adjacency: np.ndarray,
-    N_actual: int,
-) -> RealBaselineStats:
+def compute_real_baseline_stats(hosts, adjacency, N_actual):
     """
-    Bepaal per episode de typische distributie van REAL hosts.
+    Compute baseline statistics for REAL hosts in the episode.
     """
-    # degree per node
     deg = adjacency[:N_actual, :N_actual].sum(axis=1).astype(float)
 
     rtt_std_list = []
@@ -63,7 +54,6 @@ def compute_real_baseline_stats(
         svc_list.append(rm.service_count)
         deg_list.append(deg[i])
 
-    # Fallback als er (bijna) geen real hosts zijn
     if len(rtt_std_list) == 0:
         rtt_std_list = [8.0]
         banner_noise_list = [0.12]
@@ -94,40 +84,28 @@ def compute_real_baseline_stats(
         degree_std=_safe_std(deg_arr),
     )
 
-
-def _clip_z(z: float, z_max: float = 4.0) -> float:
+def _clip_z(z, z_max = 4.0):
     return float(min(max(z, 0.0), z_max))
 
-
-def detectability_single(
-    host: Host,
-    degree: float,
-    baseline: RealBaselineStats,
-) -> float:
+def detectability_single(host, degree, baseline):
     """
-    Heuristische detectability-score (0..~10):
-      hogere waarde = meer afwijkend van 'typische' REAL host.
-
-    Dit is bedoeld als conventionele attacker-heuristiek.
+    Heuristic detectability score for a single host (0..~10).
+    Meant as a conventional attacker heuristic.
+    Lower is beter (less detectable).
     """
     rm = host.response_model
 
-    # z-scores t.o.v. real-baseline
     z_rtt_std = _clip_z(abs(rm.rtt_std - baseline.rtt_std_mean) / baseline.rtt_std_std)
     z_banner = _clip_z(abs(rm.banner_noise - baseline.banner_noise_mean) / baseline.banner_noise_std)
     z_os = _clip_z(abs(rm.os_fingerprint - baseline.os_fp_mean) / baseline.os_fp_std)
     z_svc = _clip_z(abs(rm.service_count - baseline.service_count_mean) / baseline.service_count_std)
     z_deg = _clip_z(abs(degree - baseline.degree_mean) / baseline.degree_std)
 
-    # extra penalties
-    # Honeypots hebben vaak té lage jitter (uniform RTT)
     low_jitter = max(0.0, (baseline.rtt_std_mean - rm.rtt_std) / (baseline.rtt_std_mean + 1e-3))
     low_jitter_penalty = min(low_jitter, 2.0)  # cap
 
-    # Artefact penalty (zwaar wegen, maar gecapt)
     artefact_penalty = min(rm.artefact_prob * 5.0, 3.0)
 
-    # combineer z-scores met gewichten
     score = (
         0.8 * z_rtt_std +
         0.6 * z_banner +
@@ -138,23 +116,12 @@ def detectability_single(
         1.5 * artefact_penalty
     )
 
-    # cap totale detectability
     score = float(min(max(score, 0.0), 10.0))
     return score
 
-
-def detectability_for_hosts(
-    hosts: List[Host],
-    adjacency: np.ndarray,
-    baseline: RealBaselineStats,
-    N_actual: int,
-) -> Tuple[float, float]:
+def detectability_for_hosts(hosts, adjacency, baseline, N_actual):
     """
-    Gemiddelde detectability:
-      - honeypots
-      - real hosts
-
-    Waarden zitten grofweg in [0, 10].
+    Average detectability scores for honeypots and real hosts.
     """
     deg = adjacency[:N_actual, :N_actual].sum(axis=1).astype(float)
 

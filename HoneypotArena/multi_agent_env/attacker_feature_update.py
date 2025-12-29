@@ -1,11 +1,9 @@
-# attacker_feature_update.py
 import numpy as np
-from .shared_probe_models import ProbeResult
 
-def init_feature_matrix(N_max: int, F: int) -> np.ndarray:
+def init_feature_matrix(N_max, F):
     return np.zeros((N_max, F), dtype=np.float32)
 
-def update_features(features: np.ndarray, host_idx: int, probe_type: int, result: ProbeResult):
+def update_features(features, host_idx, probe_type, result):
     f = features[host_idx]
 
     f[0] += 1
