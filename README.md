@@ -24,6 +24,11 @@ This thesis explores the application of Reinforcement Learning (RL) in the conte
 ---
 
 ### Repository Overview
-This repository is composed of three parts "HoneypotAttacker", "HoneypotDefender", "HoneypotArena" corresponding to the three experiments described and executed in the report. In order to reproduce the experiments it is important to [explain how to create the python venv using requirements.txt]
+This repository is composed of three parts "HoneypotAttacker", "HoneypotDefender", "HoneypotArena" corresponding to the three experiments described and executed in the report. In order to reproduce the experiments it is important to have the correct dependencies. For this use a virtual environment.
+
+```
+python3 -m venv venv
+source venv/bin/activate
+```
 
 next explain how to call the different dexperiments and evaluations
