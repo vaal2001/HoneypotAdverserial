@@ -31,4 +31,53 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-next explain how to call the different dexperiments and evaluations
+```
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+The code is compatible with Python 3.9+ and supports CPU and CUDA GPU execution.
+
+The repository contains three experimental settings, corresponding directly to the thesis chapters.
+
+### Experiment 1: Attacker-Only Honeypot Detection
+#### Train attacker PPO
+```
+python HoneypotAttacker/train_ppo.py --total-timesteps 200000
+```
+
+#### Evaluate attacker performance
+```
+python HoneypotAttacker/eval_ppo.py --model-path models/attacker_ppo_latest.pt --episodes 50
+```
+
+### Experiment 2: Defender-Only Honeypot Concealment
+#### Train defender PPO
+```
+python HoneypotDefender/train_ppo.py --total-timesteps 1000000
+```
+
+#### Evaluate defender (PPO or random baseline)
+```
+python HoneypotDefender/eval_ppo.py --model-path models/defender_ppo_latest.pt --episodes 20
+```
+Or evaluate a random baseline:
+```
+python HoneypotDefender/eval_ppo.py --random
+```
+
+### Experiment 3: Multi-Agent Attacker–Defender Arena
+#### Train multi-agent PPO
+```
+python HoneypotArena/train_multi_agent_ppo.py --total-timesteps 500000
+```
+
+#### Evaluate trained agents
+```
+python HoneypotArena/eval_multi_agent.py --attacker-model models_multi/att_temp.pt --defender-model models_multi/def_temp.pt --episodes 50
+```
+
+### Contact
+Valentijn Ouwehand <br>
+Leiden University <br>
+Bachelor Computer Science <br>
+v.n.ouwehand@umail.leidenuniv.nl
