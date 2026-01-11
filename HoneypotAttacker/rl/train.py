@@ -157,9 +157,10 @@ def main():
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 optimizer.step()
 
-        print(f"[step={global_step}] avg_return={b_returns.mean().item():.3f}")
+        # print(f"[step={global_step}] avg_return={b_returns.mean().item():.3f}")
 
-        torch.save({"model_state_dict": agent.state_dict(), "obs_dim": obs_dim, "n_actions": n_actions, "N_max": env.N_max, "F_features": env.F}, "models/attacker_ppo_latest.pt")
+        # torch.save({"model_state_dict": agent.state_dict(), "obs_dim": obs_dim, "n_actions": n_actions, "N_max": env.N_max, "F_features": env.F}, "models/attacker_ppo_latest.pt")
+        torch.save({"model_state_dict": agent.state_dict(), "obs_dim": obs_dim, "n_actions": n_actions, "N_max": env.N_max, "F_features": env.F}, "models/test.pt")
 
     elapsed = time.time() - start_time
     print(f"Training complete in {elapsed:.1f}s.")

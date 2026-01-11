@@ -34,7 +34,7 @@ def main():
     parser.add_argument("--ent-coef", type=float, default=0.01)
     parser.add_argument("--vf-coef", type=float, default=0.5)
     parser.add_argument("--max-grad-norm", type=float, default=0.5)
-    parser.add_argument( "--save-path", type=str, default="models/defender_ppo_latest.pt", )
+    parser.add_argument( "--save-path", type=str, default="models/test2.pt", )
     args = parser.parse_args()
 
     os.makedirs("models", exist_ok=True)
@@ -154,7 +154,7 @@ def main():
                 optimizer.step()
 
         avg_return = float(b_returns.mean().item())
-        logger.log(step=global_step, avg_return=f"{avg_return:.3f}", episodes=len(episode_returns))
+        # logger.log(step=global_step, avg_return=f"{avg_return:.3f}", episodes=len(episode_returns))
 
         torch.save({"model_state_dict": agent.state_dict(), "obs_dim": obs_dim, "n_actions": n_actions, "N_max": N_max, "F_features": F_features}, args.save_path)
 

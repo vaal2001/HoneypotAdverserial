@@ -60,6 +60,8 @@ class HoneypotDefenderEnv(gym.Env):
 
         self.action_space = gym.spaces.Discrete(N_max * self.K)
 
+        self.episode_reward = 0.0
+
     def _build_node_features(self):
         """
         Build (N_max, F) node feature matrix.
@@ -128,6 +130,8 @@ class HoneypotDefenderEnv(gym.Env):
         self.last_mean_detect_real = mean_r
         self.baseline_detect_honey = mean_h
         self.baseline_detect_real = mean_r
+
+        self.episode_reward = 0.0
 
         obs = self._build_observation()
         info = {"mean_detect_honeypot": mean_h, "mean_detect_real": mean_r}
@@ -240,6 +244,10 @@ class HoneypotDefenderEnv(gym.Env):
 
         terminated = self.step_count >= self.max_steps
         truncated = False
+
+        if terminated or truncated:
+            self.episode_reward += reward
+            print(f"{self.episode_reward:.2f}")
 
         obs = self._build_observation()
         info = {"mean_detect_honeypot": mean_h, "mean_detect_real": mean_r,}

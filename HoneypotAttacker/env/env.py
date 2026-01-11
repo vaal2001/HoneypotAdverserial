@@ -51,6 +51,10 @@ class HoneypotDetectionEnv(gym.Env):
 
         self.actions_used = 0
 
+        self.episode_reward = 0.0
+        self.correct_classifications = 0
+        self.total_classifications = 0
+
     def _generate_network(self):
         self.N_actual, self.hosts, self.adj_true = generate_random_network(self.N_max, self.rng)
         self.adj_discovered[:] = 0
@@ -63,6 +67,9 @@ class HoneypotDetectionEnv(gym.Env):
         self.actions_used = 0
         self.probes_done[:, :] = 0
         self.ping_done[:] = 0
+        self.episode_reward = 0.0
+        self.correct_classifications = 0
+        self.total_classifications = 0
 
     def _decode_action(self, action):
         return action // self.K, action % self.K
@@ -161,6 +168,10 @@ class HoneypotDetectionEnv(gym.Env):
         if terminated:
             remaining = max(self.max_actions - self.actions_used, 0)
             reward += early_finish_bonus(remaining, self.max_actions)
+            self.episode_reward += reward
+
+            accuracy = self.correct_classifications / self.total_classifications if self.total_classifications > 0 else 0.0
+            print(f"{self.actions_used},{self.episode_reward:.2f},{accuracy:.2f}")
 
         obs = build_observation(self.node_features, self.adj_discovered, self.mask_known, self.mask_classified, self.max_actions - self.actions_used, self.max_actions)
         obs["action_mask"] = self._build_action_mask()
@@ -226,11 +237,23 @@ class HoneypotDetectionEnv(gym.Env):
         elif action_type == 5:  # classify REAL
             self.mask_classified[host_idx] = 1
             self.classified_as[host_idx] = False
+
+            self.total_classifications += 1
+            correct = (host.host_type != HostType.HONEYPOT)
+            if correct:
+                self.correct_classifications += 1
+
             bonus += classification_reward(host, False)
 
         elif action_type == 6:  # classify HONEYPOT
             self.mask_classified[host_idx] = 1
             self.classified_as[host_idx] = True
+
+            self.total_classifications += 1
+            correct = (host.host_type == HostType.HONEYPOT)
+            if correct:
+                self.correct_classifications += 1
+
             bonus += classification_reward(host, True)
 
         return bonus
