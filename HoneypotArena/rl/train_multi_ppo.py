@@ -272,12 +272,12 @@ def main():
         mean_ret_def = float(np.mean(episode_returns_def[-10:])) if episode_returns_def else 0.0
 
         elapsed = time.time() - start_time
-        print(
-            f"[step={global_step:8d}] "
-            f"mean_ret_att={mean_ret_att:7.3f} "
-            f"mean_ret_def={mean_ret_def:7.3f} "
-            f"time={elapsed:6.1f}s"
-        )
+        # print(
+        #     f"[step={global_step:8d}] "
+        #     f"mean_ret_att={mean_ret_att:7.3f} "
+        #     f"mean_ret_def={mean_ret_def:7.3f} "
+        #     f"time={elapsed:6.1f}s"
+        # )
 
         torch.save(
             {
@@ -301,7 +301,7 @@ def main():
             os.path.join(args.save_dir, "def_temp.pt"),
         )
 
-    print(f"Training done in {time.time() - start_time:.1f}s")
+    # print(f"Training done in {time.time() - start_time:.1f}s")
 
 if __name__ == "__main__":
     main()
