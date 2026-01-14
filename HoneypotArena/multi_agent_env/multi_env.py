@@ -190,6 +190,9 @@ class MultiAgentHoneypotEnv(gym.Env):
 
         rewards = {"attacker": att_reward, "defender": def_reward}
 
+        if terminated:
+            print(att_reward)
+
         return obs, rewards, terminated, truncated, {}
 
     def _apply_defender_action(self, action):
