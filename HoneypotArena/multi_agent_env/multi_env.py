@@ -59,6 +59,8 @@ class MultiAgentHoneypotEnv(gym.Env):
         )
 
         self.action_spaces = {"attacker": gym.spaces.Discrete(N_max * self.K_attacker), "defender": gym.spaces.Discrete(N_max * self.K_defender)}
+        self.n_classified = 0
+        self.n_current_classified = 0
 
     def reset(self, *, seed=None, options=None):
         if seed is not None:
@@ -82,6 +84,8 @@ class MultiAgentHoneypotEnv(gym.Env):
         self.probes_done[:, :] = 0
         self.ping_done[:] = 0
         self.attacker_actions_used = 0
+        self.n_classified = 0
+        self.n_current_classified = 0
 
     def _build_attacker_obs(self):
         remaining = max(self.max_attacker_actions - self.attacker_actions_used, 0)
@@ -192,6 +196,8 @@ class MultiAgentHoneypotEnv(gym.Env):
 
         if terminated:
             print(att_reward)
+            acc = self.n_current_classified/self.n_classified
+            print(f"{att_reward:.2f},{acc:.2f}")
 
         return obs, rewards, terminated, truncated, {}
 
@@ -267,11 +273,23 @@ class MultiAgentHoneypotEnv(gym.Env):
         if sub == 5:
             self.mask_classified[host_idx] = 1
             self.classified_as[host_idx] = False
+
+            self.n_classified += 1
+
+            if host.host_type == HostType.REAL:
+                self.n_current_classified += 1
+            
             return reward + reward_classification(host, False)
 
         if sub == 6:
             self.mask_classified[host_idx] = 1
             self.classified_as[host_idx] = True
+
+            self.n_classified += 1
+
+            if host.host_type == HostType.HONEYPOT:
+                self.n_current_classified += 1
+
             return reward + reward_classification(host, True)
 
         return reward
