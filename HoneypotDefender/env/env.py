@@ -5,6 +5,86 @@ from .host_profiles import HostType, DEVICE_TYPES
 from .network_generator import generate_random_network
 from .detectability import (compute_real_baseline_stats, detectability_for_hosts)
 
+def _clip_z(z, z_max = 4.0):
+    return float(min(max(z, 0.0), z_max))
+
+def detectability_single(host, degree, baseline):
+    """
+    Heuristic detectability score for a single host (0..~10).
+    Meant as a conventional attacker heuristic.
+    Lower is beter (less detectable).
+    """
+    rm = host.response_model
+
+    z_rtt_std = _clip_z(abs(rm.rtt_std - baseline.rtt_std_mean) / baseline.rtt_std_std)
+    z_banner = _clip_z(abs(rm.banner_noise - baseline.banner_noise_mean) / baseline.banner_noise_std)
+    z_os = _clip_z(abs(rm.os_fingerprint - baseline.os_fp_mean) / baseline.os_fp_std)
+    z_svc = _clip_z(abs(rm.service_count - baseline.service_count_mean) / baseline.service_count_std)
+    z_deg = _clip_z(abs(degree - baseline.degree_mean) / baseline.degree_std)
+
+    low_jitter = max(0.0, (baseline.rtt_std_mean - rm.rtt_std) / (baseline.rtt_std_mean + 1e-3))
+    low_jitter_penalty = min(low_jitter, 2.0)  # cap
+
+    artefact_penalty = min(rm.artefact_prob * 5.0, 3.0)
+
+    score = (
+        0.8 * z_rtt_std +
+        0.6 * z_banner +
+        1.0 * z_os +
+        0.4 * z_svc +
+        0.4 * z_deg +
+        1.0 * low_jitter_penalty +
+        1.5 * artefact_penalty
+    )
+
+    score = float(min(max(score, 0.0), 10.0))
+    return score
+
+
+def heuristic_attack_metrics(env):
+    """
+    Heuristic attacker metrics (Attack Success Rate + Honey Detection Rate)
+    """
+    hosts = env.hosts
+    N_actual = env.N_actual
+    adj = env.adjacency
+    baseline = env.baseline_stats
+
+    if baseline is None or N_actual == 0:
+        return 0.0, 0.0
+
+    deg = adj[:N_actual, :N_actual].sum(axis=1).astype(float)
+
+    scores = []
+    labels = []
+
+    for i, h in enumerate(hosts[:N_actual]):
+        s = detectability_single(h, degree=deg[i], baseline=baseline)
+        scores.append(s)
+        labels.append(h.host_type == h.host_type.__class__.HONEYPOT)
+
+    scores = np.asarray(scores, dtype=float)
+    labels = np.asarray(labels, dtype=bool)
+
+    tau = 3.0
+
+    preds = scores >= tau
+
+    true_honey = labels
+    true_real = ~labels
+
+    TP = np.logical_and(preds, true_honey).sum()
+    FN = np.logical_and(~preds, true_honey).sum()
+    TN = np.logical_and(~preds, true_real).sum()
+    FP = np.logical_and(preds, true_real).sum()
+
+    N = max(1, N_actual)
+    asr = float((TP + TN) / N)
+    hdr = float(TP / max(1, (TP + FN)))
+
+    return asr, hdr
+
+
 class HoneypotDefenderEnv(gym.Env):
     """
     Simple defender environment (no attacker).
@@ -247,7 +327,10 @@ class HoneypotDefenderEnv(gym.Env):
 
         if terminated or truncated:
             self.episode_reward += reward
-            print(f"{self.episode_reward:.2f}")
+
+            asr, hrd = heuristic_attack_metrics(self)
+
+            print(f"{self.episode_reward:.2f},{asr:.2f},{hrd:.2f}")
 
         obs = self._build_observation()
         info = {"mean_detect_honeypot": mean_h, "mean_detect_real": mean_r,}
