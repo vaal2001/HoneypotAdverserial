@@ -195,7 +195,7 @@ class MultiAgentHoneypotEnv(gym.Env):
         rewards = {"attacker": att_reward, "defender": def_reward}
 
         if terminated:
-            print(att_reward)
+            # print(att_reward)
             acc = self.n_current_classified/self.n_classified
             print(f"{att_reward:.2f},{acc:.2f}")
 
